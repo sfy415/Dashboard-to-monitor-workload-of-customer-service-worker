@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/css/bootstrap.min.css">
+<style type="text/css">
+body {
+    color: #5D636B;
+    font-size: 16px;
+}
+input {
+    height: 30px;
+}
+button {
+    height: 30px;
+}
+select {
+    font-size: 16px;
+    height: 30px;
+    /* font-family: pingfang SC; */
+    background-color: transparent;
+    appearance: none;
+    cursor: pointer;
+    color: #5D636B;
+    margin: 20px;
+    width: 160px;
+}
+
+.axis line,
+.axis path {
+    fill: none;
+    stroke: #BBBBBB;
+    stroke-width: 1px;
+    shape-rendering: crispEdges;
+}
+.axis text {
+    font-size: 12px;
+    fill: #6C7B8E;
+    font-family: pingfang SC;
+}
+</style>
+<body>
+<select id="sel-name" onchange="changeView()">
+    <option>All</option>
+    <option>Leena Romppainen</option>
+    <option>Niklas Henschel</option>
+    <option>Janne Savikko</option>
+    <option>Jussi Vaihia</option>
+    <option>Julia Shamrina</option>
+    <option>Jaakko Malkamäki</option>
+    <option>Tuomas Hietala</option>
+    <option>Laura Kiviluoma</option>
+    <option>Admin-janne Savikko</option>
+</select>
+
+<select id="sel-status" onchange="changeView()">
+    <option>All</option>
+    <option>solved</option>
+    <option>closed</option>
+    <option>hold</option>
+    <option>open</option>
+    <option>pending</option>
+</select>
+
+Subject: <input id="input-subject" type="" name="" >
+
+<button onclick="changeView()">Search</button>
+
+<div id="container"></div>
+<div style="width: 300px; position: absolute; left: 1050px; top: 50px;">
+    <h4 style="padding: 0 0 0 10px;">Detail</h4>
+    <ul class="list-group" id="info">
+        Details of the data will be shown here
+    </ul>
+</div>
+
+
+<script src="d3.v3.min.js"></script>
+<script>
+var names =['Niklas Henschel', 'Janne Savikko', 'Leena Romppainen', 'Jussi Vaihia', 'Julia Shamrina', 'Jaakko Malkamäki', 'Tuomas Hietala', 'Laura Kiviluoma', 'Admin-janne Savikko'];
+
+var width = 960,
+	height = 500;
+var margin = {top: 20, right: 20, bottom: 20, left: 50};
+var data, name, status, subject;
+
+d3.csv("hehe.csv", function(err, load) {
+    data = load;
+    //console.log(data);
+    changeView();
+})
+
+function changeView() {
+    document.getElementById('container').innerHTML = '';
+
+    name = document.getElementById('sel-name').value;
+    status = document.getElementById('sel-status').value;
+    subject = document.getElementById('input-subject').value;
+    console.log(name, status, subject);
+
+    var filterData = data;
+
+    if (name != 'All') {
+        filterData = filterData.filter(d => d.assignee == name);
+    }
+    if (status != 'All') {
+        filterData = filterData.filter(d => d.status == status);
+    }
+    if (subject != '') {
+        filterData = filterData.filter(d => d.subject.search(subject) > -1)
+    }
+    console.log("d", name, status, subject, filterData);
+
+   var dataset = [];
+    filterData.forEach(datum => {
+        var row_arr = [];
+        for (day in datum) {
+            if (isNaN(day) == false) {
+                var obj = {};
+                obj.x = +day;
+                obj.y = +datum[day];
+                row_arr.push(obj);
+            }
+        }
+        dataset.push(row_arr);
+    })
+    //console.log(dataset);
+    
+    if (dataset.length > 0) {
+
+        var stack = d3.layout.stack()
+                .offset("silhouette")
+                //.offset("wiggle")
+                //.offset("expand")
+                //.offset("zero")   
+                (dataset);
+
+        var xScale = d3.scale.ordinal()
+            .domain(d3.range(dataset[0].length))
+            .rangeRoundBands([0, width], 0.01);
+
+        var maxHeight=d3.max(dataset, function(d) {
+                    return d3.max(d, function(d) { return d.y0 + d.y; });
+                });
+                
+        var yScale = d3.scale.linear()
+            .domain([0, maxHeight])
+            .range([height-30, 30]);
+
+        var svg = d3.select("#container")
+                    .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        var xAxis = d3.svg.axis()
+            .scale(xScale)
+            .orient("bottom")
+            .innerTickSize(4)
+            .tickPadding(6);
+
+        svg.append("g")
+            .attr("class","axis")
+            .attr("transform","translate(0,500)")
+            .call(xAxis);
+
+        var color = ["rgb(254, 240, 217)", "rgb(253, 212, 158)", "rgb(253, 187, 132)", "rgb(252, 141, 89)", "rgb(227, 74, 51)", "rgb(179, 0, 0)"];
+
+        var area = d3.svg.area()
+            .interpolate("cardinal")
+            .x(function(d,i) { return xScale(i); })
+            .y0(function(d) { return height-yScale(d.y0 + d.y); })
+            .y1(function(d) { return height-yScale(d.y0); });
+            
+        var layers = svg.selectAll(".layer")
+              .data(dataset)
+            .enter().append("path")
+              .attr("class", "layer")
+              .attr("d", function(d) { return area(d); })
+              .each(function(d,i) {
+                var sum = +filterData[i].commment_sum;
+                    d.sum = sum;
+                    d.id = filterData[i].id;
+                    d.status = filterData[i].status;
+                    d.subject = filterData[i].subject;
+                    d.assignee = filterData[i].assignee;
+                    d.ass_site = filterData[i].ass_site;
+                    d.requester = filterData[i].requester;
+                    d.req_site = filterData[i].req_site;
+              })
+              .style("fill", function(d, i) {
+                if (d.sum>5) return color[5]
+                else return color[d.sum];
+              })
+              .style("stroke", "#fff")
+              .style("stroke-width", 0.4)
+              .style("stroke-opacity", 0.5)
+            .on("click", function(d,i) {
+                var info_container = document.getElementById('info');
+                info_container.innerHTML = '';
+                var dims = ["id", "status", "subject", "assignee", "ass_site", "requester", "req_site"];
+                dims.forEach(function(dim) {
+                    var item = document.createElement('li');
+                    item.className = 'list-group-item';
+                    item.innerHTML = dim + ": " + d[dim];
+                    info_container.appendChild(item);
+                })
+                console.log(i);
+            });
+
+            layers.on("mouseover", function(a,i) {
+                layers.each(function(b,j) {
+                    if (i != j)  d3.select(this).style("fill-opacity", 0.5)
+                });
+            })
+            .on("mouseout", function() {
+                layers.each(function() {
+                    d3.select(this).style("fill-opacity", 1)
+                })
+            });     
+    }
+    svg.selectAll("text")
+    .each(function() {
+        var text = +this.innerHTML;
+        this.innerHTML = text+1;
+    })
+}
+</script>
